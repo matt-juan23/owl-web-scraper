@@ -5,62 +5,43 @@ import requests, os, time
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
-from bs4 import BeautifulSoup
 
-api_url = 'https://api.overwatchleague.com/players?locale=en_US'
+# starting urls
+player_api_url = 'https://api.overwatchleague.com/players?locale=en_US'
+stat_api_url = 'https://api.overwatchleague.com/stats/players?stage_id=regular_season&season=2019'
 base_url = 'https://overwatchleague.com/en-us/'
 player_url = base_url +'players/'
 
+# Class that holds all information about the players
 class Players():
     def __init__(self):
-        self.players = self.store_players()
-        self.info = []
+        self.info = {}
         self.stats = []
 
-    def store_players(self):
-        # get the players and info
-        # request to get the api link
-        r = requests.get(api_url)
-        # this is a dictionary that stores all the player information
-        data = r.json() 
-        players = {}
+    # store all the players from the api url into a dictionary
+    def store_player(self, data, name):
+        # get the player's info 
+        player_info = {}
         for player in data['content']:
-            name = player['name']
-            players[name] = {'full_name': ' '.join([player['givenName'], player['familyName']]), 
-                                        'image': player['headshot'], 
-                                        'role': player['attributes']['role'],
-                                        'team': player['teams'][0]['team']['name'],
-                                        'region': player['nationality']}
-            if 'heroes' in player['attributes']:
-                players[name]['heroes'] = map(lambda x: x.capitalize(), player['attributes']['heroes'])
-            else:
-                players[name]['heroes'] = ['None']
+            if name == player['name']:
+                player_info = {'gamertag': name,
+                                'full_name': ' '.join([player['givenName'], player['familyName']]), 
+                                'image': player['headshot'], 
+                                'role': player['attributes']['role'],
+                                'team': player['teams'][0]['team']['name'],
+                                 'region': player['nationality']}
+                if 'heroes' in player['attributes']:
+                    player_info['heroes'] = map(lambda x: x.capitalize(), player['attributes']['heroes'])
+                else:
+                    player_info['heroes'] = ['None']
 
-            if 'homeLocation' in players:
-                players[name]['hometown'] = players['homeLocation']
-            else:
-                players[name]['hometown'] = 'Unknown'
-
-        return players
-
-    def download_all_images(self):
-        # make the directory
-        dir_name = 'player_headshots'
-        if os.path.exists(dir_name):
-            print("This folder already exists")
-        else:
-            os.makedirs(dir_name)
-            for player in self.players:
-                print("Downloading image for %s" % player)
-                res = requests.get(self.players[player]['image'])
-                res.raise_for_status()
-
-                img_file = open(os.path.join(dir_name, player + '.png'), 'wb')
-                for chunk in res.iter_content(10000):
-                    img_file.write(chunk)
-                img_file.close()
+                if 'homeLocation' in player:
+                    player_info['hometown'] = player['homeLocation']
+                else:
+                    player_info['hometown'] = 'Unknown'
+                break
+        return player_info
 
     def find_player(self, search_name):
         # wait until the filter search field loads into the website
@@ -92,8 +73,8 @@ class Players():
         link = browser.find_element_by_link_text(name)
         link.click()
 
-    def show_player_info(self, name):
-        print('Gamertag: ' + name)
+    def show_player_info(self):
+        print('Gamertag: ' + self.info['gamertag'])
         print('Name: ' + self.info['full_name'])
         print('Region: ' + self.info['region'])
         print('Hometown: ' + self.info['hometown'])
@@ -189,6 +170,28 @@ class Players():
             print(p1_rank + p2_rank)
             print()
 
+
+# function that downloads all the images
+def download_all_images(data):
+    images = [{'name': player['name'],
+               'img': player['headshot']} for player in data['content']]
+    # make the directory
+    dir_name = 'player_headshots'
+    if os.path.exists(dir_name):
+        print("This folder already exists")
+    else:
+        os.makedirs(dir_name)
+        for player in images:
+            print("Downloading image for %s" % player['name'])
+            res = requests.get(player['img'])
+            res.raise_for_status()
+
+            img_file = open(os.path.join(dir_name, player['name'] + '.png'), 'wb')
+            for chunk in res.iter_content(10000):
+                img_file.write(chunk)
+            img_file.close()
+        print('Successfully downloaded all images')
+
 def run_command(owl, name):
     print('What do you want to search for? ')
     print('Type ? for a list of available commands')
@@ -196,8 +199,7 @@ def run_command(owl, name):
     if cmd == '?':
         help_command()
     elif cmd == 'i':
-        owl.info = owl.players[name]
-        owl.show_player_info(name)
+        owl.show_player_info()
     elif cmd == 'h':
         owl.hero_info()
     elif cmd == 'o':
@@ -227,17 +229,47 @@ def quit():
     browser.close()
     exit()
 
+'''
+WILL USE THIS LATER MAYBE
+# store all the players from the api url into a dictionary
+def store_players(self):
+    # get the players and info
+    # request to get the api link
+    r = requests.get(player_api_url)
+    # this is a dictionary that stores all the player information
+    data = r.json() 
+    players = {}
+    for player in data['content']:
+        name = player['name']
+        players[name] = {'full_name': ' '.join([player['givenName'], player['familyName']]), 
+                         'image': player['headshot'], 
+                         'role': player['attributes']['role'],
+                         'team': player['teams'][0]['team']['name'],
+                         'region': player['nationality']}
+        if 'heroes' in player['attributes']:
+            players[name]['heroes'] = map(lambda x: x.capitalize(), player['attributes']['heroes'])
+        else:
+            players[name]['heroes'] = ['None']
+
+        if 'homeLocation' in players:
+            players[name]['hometown'] = players['homeLocation']
+        else:
+            players[name]['hometown'] = 'Unknown'
+    return players
+'''
 if __name__ == '__main__':
     # create a Players object
     owl = Players()
 
-    # store all the player info
-    owl.store_players()
-
     # get the mode from the user
     mode = int(input('Enter mode: '))
+
+    # get the api url for the players
+    r = requests.get(player_api_url)
+    # this is a dictionary that stores all the player information
+    data = r.json()
     if mode == 1:
-        owl.download_all_images()
+        download_all_images(data)
     elif mode == 2:
         # full name player search
         browser = webdriver.Chrome()
@@ -255,6 +287,7 @@ if __name__ == '__main__':
                 found = True
 
             if found:
+                owl.info = owl.store_player(data, name)
                 # locate the link to the player profile and click it
                 owl.get_player(name)
                 owl.stats = owl.get_stats()
@@ -270,4 +303,4 @@ if __name__ == '__main__':
 
     else: 
         print('Invalid mode. Quitting program')
-        quit()
+        exit()
